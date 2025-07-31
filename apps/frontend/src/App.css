@@ -285,3 +285,15 @@
   margin: 0;
   font-size: 14px;
 }
+
+.retry-status {
+  padding: 8px 12px;
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  margin: 8px 0;
+}

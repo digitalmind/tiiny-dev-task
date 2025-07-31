@@ -114,6 +114,19 @@ function ResumableUploader() {
                       onClick={handleStartNewUpload}
                     />
                   </>
+                ) : errorMessage.includes("retries") ? (
+                  <>
+                    <Button
+                      label="Resume Upload"
+                      variant="primary"
+                      onClick={handleRetry}
+                    />
+                    <Button
+                      label="Start Over"
+                      variant="danger"
+                      onClick={handleReset}
+                    />
+                  </>
                 ) : (
                   <>
                     <Button

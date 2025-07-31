@@ -273,6 +273,7 @@ export const useResumableUpload = () => {
   const handleResumeUpload = () => {
     setUploadStatus("uploading");
     isPausedRef.current = false;
+    uploadProgressRef.current?.updateRetryStatus("");
     uploadFile(selectedFile);
   };
 
@@ -308,7 +309,10 @@ export const useResumableUpload = () => {
     }
   };
 
-  const uploadChunk = async (chunk, chunkIndex) => {
+  const uploadChunk = async (chunk, chunkIndex, retryCount = 0) => {
+    const MAX_RETRIES = 8;
+    const BASE_DELAY = 1000;
+
     const formData = new FormData();
     formData.append("chunkData", chunk);
     formData.append("fileId", fileId);
@@ -340,6 +344,7 @@ export const useResumableUpload = () => {
           const response = JSON.parse(xhr.responseText);
           markChunkAsUploaded(chunkIndex);
           uploadProgressRef.current?.markChunkComplete(chunkIndex, chunk.size);
+          uploadProgressRef.current?.updateRetryStatus("");
           resolve(response);
         } else {
           reject(new Error(`Chunk ${chunkIndex} failed: ${xhr.statusText}`));
@@ -354,12 +359,38 @@ export const useResumableUpload = () => {
         reject(new Error(`Upload aborted for chunk ${chunkIndex}`));
       });
 
+      xhr.addEventListener("timeout", () => {
+        reject(new Error(`Timeout for chunk ${chunkIndex}`));
+      });
+
       xhr.open("POST", "http://localhost:3001/api/upload-chunks");
       xhr.timeout = 30000;
       xhr.send(formData);
 
-      // Store the xhr object for potential abort
       abortControllerRef.current = xhr;
+    }).catch(async (error) => {
+      if (retryCount < MAX_RETRIES && !error.message.includes("aborted")) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        const retryMessage = `Retrying chunk ${chunkIndex} in ${delay}ms (attempt ${
+          retryCount + 1
+        }/${MAX_RETRIES})`;
+        console.log(retryMessage);
+
+        uploadProgressRef.current?.updateRetryStatus(retryMessage);
+
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return uploadChunk(chunk, chunkIndex, retryCount + 1);
+      }
+
+      uploadProgressRef.current?.updateRetryStatus("");
+
+      if (retryCount >= MAX_RETRIES && !error.message.includes("aborted")) {
+        throw new Error(
+          `Chunk ${chunkIndex} failed after ${MAX_RETRIES} retries. You can manually resume the upload.`
+        );
+      }
+
+      throw error;
     });
   };
 
@@ -367,6 +398,8 @@ export const useResumableUpload = () => {
     setUploadStatus("uploading");
     isPausedRef.current = false;
     abortControllerRef.current = null;
+
+    uploadProgressRef.current?.updateRetryStatus("");
 
     const progressInterval = uploadProgressRef.current?.startProgressPolling();
 
@@ -433,6 +466,18 @@ export const useResumableUpload = () => {
             clearInterval(progressInterval);
             return;
           }
+
+          if (
+            error.message.includes("failed after") &&
+            error.message.includes("retries")
+          ) {
+            console.log("Retries exhausted, allowing manual resume");
+            clearInterval(progressInterval);
+            setUploadStatus("error");
+            setErrorMessage(error.message);
+            return;
+          }
+
           throw error;
         }
       }

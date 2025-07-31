@@ -22,6 +22,7 @@ const UploadProgress = forwardRef(
     const [chunkProgress, setChunkProgress] = useState({});
     const [bytesTransferred, setBytesTransferred] = useState(0);
     const [totalBytes, setTotalBytes] = useState(0);
+    const [retryStatus, setRetryStatus] = useState("");
 
     const calculateProgressFromChunks = (uploadedChunks) => {
       let completedChunksBytes = 0;
@@ -143,12 +144,17 @@ const UploadProgress = forwardRef(
       }));
     };
 
+    const updateRetryStatus = (message) => {
+      setRetryStatus(message);
+    };
+
     useImperativeHandle(ref, () => ({
       bytesTransferred,
       totalBytes,
       startProgressPolling,
       updateChunkProgress,
       markChunkComplete,
+      updateRetryStatus,
     }));
 
     if (uploadStatus !== "uploading" && uploadStatus !== "paused") {
@@ -180,6 +186,7 @@ const UploadProgress = forwardRef(
         <div className="upload-filename">
           {getFileName()} {uploadStatus === "uploading" && "(uploading...)"}
         </div>
+        {retryStatus && <div className="retry-status">{retryStatus}</div>}
         <div className="progress-with-controls">
           <Progress currentBytes={bytesTransferred} totalBytes={totalBytes} />
           {uploadStatus === "uploading" && onPause && (
