@@ -1,8 +1,30 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+} = require("@aws-sdk/client-s3");
+
+const s3Client = new S3Client({
+  forcePathStyle: false, // Configures to use subdomain/virtual calling format.
+  ...(process.env.S3_ENDPOINT && { endpoint: process.env.S3_ENDPOINT }),
+  region: process.env.AWS_REGION || "us-east-1",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME || "your-upload-bucket";
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, __dirname + "/uploads/files");
@@ -66,74 +88,106 @@ app.post("/api/upload-chunks", chunkUpload, (req, res) => {
     return res.status(400).json({ error: "Missing required parameters" });
   }
 
-  const chunkDir = path.join(chunksDir, fileId);
-  const chunkPath = path.join(chunkDir, `chunk-${chunkIndex}`);
-  const metadataPath = path.join(chunkDir, "metadata.json");
+  const uploadChunkToS3 = async () => {
+    try {
+      const chunkKey = `chunks/${fileId}/chunk-${chunkIndex}`;
 
-  try {
-    if (!fs.existsSync(chunkDir)) {
-      fs.mkdirSync(chunkDir, { recursive: true });
-    }
+      if (req.file) {
+        const uploadParams = {
+          Bucket: BUCKET_NAME,
+          Key: chunkKey,
+          Body: req.file.buffer,
+          ContentType: "application/octet-stream",
+        };
 
-    const metadata = {
-      fileName,
-      totalChunks: parseInt(totalChunks),
-      totalSize: parseInt(totalSize),
-      uploadedChunks: [],
-      createdAt: new Date().toISOString(),
-    };
+        await s3Client.send(new PutObjectCommand(uploadParams));
+        console.log(`Chunk ${chunkIndex} uploaded to S3: ${chunkKey}`);
+      }
 
-    if (fs.existsSync(metadataPath)) {
-      const existingMetadata = JSON.parse(
-        fs.readFileSync(metadataPath, "utf8")
+      const metadataKey = `metadata/${fileId}.json`;
+      let metadata = {
+        fileName,
+        totalChunks: parseInt(totalChunks),
+        totalSize: parseInt(totalSize),
+        uploadedChunks: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      try {
+        const existingMetadata = await s3Client.send(
+          new GetObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: metadataKey,
+          })
+        );
+
+        const metadataString = await existingMetadata.Body.transformToString();
+        metadata = JSON.parse(metadataString);
+      } catch (error) {
+        if (
+          error.name === "NoSuchKey" ||
+          error.$metadata?.httpStatusCode === 404
+        ) {
+          // Metadata doesn't exist yet, use the default metadata we created above
+          console.log(`Creating new metadata for file ${fileId}`);
+        } else {
+          throw error;
+        }
+      }
+
+      if (!metadata.uploadedChunks.includes(parseInt(chunkIndex))) {
+        metadata.uploadedChunks.push(parseInt(chunkIndex));
+      }
+
+      await s3Client.send(
+        new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: metadataKey,
+          Body: JSON.stringify(metadata, null, 2),
+          ContentType: "application/json",
+        })
       );
-      metadata.uploadedChunks = existingMetadata.uploadedChunks || [];
+
+      const isComplete =
+        metadata.uploadedChunks.length === metadata.totalChunks;
+
+      res.json({
+        success: true,
+        chunkIndex: parseInt(chunkIndex),
+        uploadedChunks: metadata.uploadedChunks,
+        isComplete,
+        message: isComplete
+          ? "All chunks received, file ready for assembly"
+          : "Chunk uploaded successfully",
+      });
+    } catch (error) {
+      console.error("S3 upload error:", error);
+      res.status(500).json({ error: "Failed to upload chunk to S3" });
     }
+  };
 
-    if (!metadata.uploadedChunks.includes(parseInt(chunkIndex))) {
-      metadata.uploadedChunks.push(parseInt(chunkIndex));
-    }
-
-    if (req.file) {
-      const chunkBuffer = req.file.buffer;
-      fs.writeFileSync(chunkPath, chunkBuffer);
-    }
-
-    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-
-    const isComplete = metadata.uploadedChunks.length === metadata.totalChunks;
-
-    res.json({
-      success: true,
-      chunkIndex: parseInt(chunkIndex),
-      uploadedChunks: metadata.uploadedChunks,
-      isComplete,
-      message: isComplete
-        ? "All chunks received, file ready for assembly"
-        : "Chunk uploaded successfully",
-    });
-  } catch (error) {
-    console.error("Chunk upload error:", error);
-    res.status(500).json({ error: "Failed to save chunk" });
-  }
+  uploadChunkToS3();
 });
 
-app.post("/api/assemble-chunks", (req, res) => {
+app.post("/api/assemble-chunks", async (req, res) => {
   const { fileId } = req.body;
 
   if (!fileId) {
     return res.status(400).json({ error: "Missing fileId" });
   }
 
-  const chunkDir = path.join(chunksDir, fileId);
-  const metadataPath = path.join(chunkDir, "metadata.json");
-
   try {
-    if (!fs.existsSync(metadataPath)) {
-      return res.status(404).json({ error: "File metadata not found" });
-    }
+    const metadataKey = `metadata/${fileId}.json`;
 
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    const metadataResponse = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: metadataKey,
+      })
+    );
+
+    const metadataString = await metadataResponse.Body.transformToString();
+    const metadata = JSON.parse(metadataString);
 
     if (metadata.uploadedChunks.length !== metadata.totalChunks) {
       return res.status(400).json({
@@ -142,39 +196,105 @@ app.post("/api/assemble-chunks", (req, res) => {
         totalChunks: metadata.totalChunks,
       });
     }
+
     const finalFileName = `${randomString(16)}-${metadata.fileName}`;
-    const finalFilePath = path.join(filesDir, finalFileName);
-    const writeStream = fs.createWriteStream(finalFilePath);
+    const finalFileKey = `files/${finalFileName}`;
+
+    const assembledChunks = [];
 
     for (let i = 0; i < metadata.totalChunks; i++) {
-      const chunkPath = path.join(chunkDir, `chunk-${i}`);
-      if (fs.existsSync(chunkPath)) {
-        const chunkData = fs.readFileSync(chunkPath);
-        writeStream.write(chunkData);
-      }
+      const chunkKey = `chunks/${fileId}/chunk-${i}`;
+
+      const chunkResponse = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: chunkKey,
+        })
+      );
+
+      const chunkBuffer = await chunkResponse.Body.transformToByteArray();
+      assembledChunks.push(Buffer.from(chunkBuffer));
     }
 
-    writeStream.end();
+    const finalFileBuffer = Buffer.concat(assembledChunks);
 
-    writeStream.on("finish", () => {
-      fs.rmSync(chunkDir, { recursive: true, force: true });
+    await s3Client.send(
+      new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: finalFileKey,
+        Body: finalFileBuffer,
+        ContentType: "application/octet-stream",
+      })
+    );
 
-      res.json({
-        success: true,
-        fileName: finalFileName,
-        originalName: metadata.fileName,
-        size: metadata.totalSize,
-        message: "File assembled successfully",
-      });
-    });
+    const chunksPrefix = `chunks/${fileId}/`;
 
-    writeStream.on("error", (error) => {
-      console.error("File assembly error:", error);
-      res.status(500).json({ error: "Failed to assemble file" });
+    const listChunksResponse = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET_NAME,
+        Prefix: chunksPrefix,
+      })
+    );
+
+    const deletePromises = listChunksResponse.Contents.map((obj) =>
+      s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: obj.Key,
+        })
+      )
+    );
+
+    await Promise.all(deletePromises);
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: metadataKey,
+      })
+    );
+
+    res.json({
+      success: true,
+      fileName: finalFileName,
+      originalName: metadata.fileName,
+      size: metadata.totalSize,
+      s3Key: finalFileKey,
+      message: "File assembled and uploaded to S3 successfully",
     });
   } catch (error) {
-    console.error("Chunk assembly error:", error);
-    res.status(500).json({ error: "Failed to assemble chunks" });
+    console.error("S3 assembly error:", error);
+    res.status(500).json({ error: "Failed to assemble file in S3" });
+  }
+});
+
+app.get("/api/upload-progress/:fileId", async (req, res) => {
+  const { fileId } = req.params;
+  const metadataKey = `metadata/${fileId}.json`;
+
+  try {
+    const metadataResponse = await s3Client.send(
+      new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: metadataKey,
+      })
+    );
+
+    const metadataString = await metadataResponse.Body.transformToString();
+    const metadata = JSON.parse(metadataString);
+
+    res.json({
+      fileId,
+      fileName: metadata.fileName,
+      uploadedChunks: metadata.uploadedChunks,
+      totalChunks: metadata.totalChunks,
+      progress: (metadata.uploadedChunks.length / metadata.totalChunks) * 100,
+    });
+  } catch (error) {
+    if (error.name === "NoSuchKey" || error.$metadata?.httpStatusCode === 404) {
+      return res.status(404).json({ error: "Upload not found" });
+    }
+    console.error("Progress check error:", error);
+    res.status(500).json({ error: "Failed to get progress" });
   }
 });
 

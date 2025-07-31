@@ -11,6 +11,7 @@ export const useResumableUpload = () => {
   const [fileId, setFileId] = useState();
   const [fileChunks, setFileChunks] = useState([]);
   const [hasExistingUpload, setHasExistingUpload] = useState(false);
+  const [assemblyResult, setAssemblyResult] = useState(null);
 
   const uploadProgressRef = useRef();
   const isPausedRef = useRef(false);
@@ -209,6 +210,7 @@ export const useResumableUpload = () => {
     setFileId(undefined);
     setFileChunks([]);
     setHasExistingUpload(false);
+    setAssemblyResult(null);
 
     const keys = Object.keys(localStorage);
     const uploadKeys = keys.filter((key) => key.startsWith("upload-"));
@@ -283,6 +285,10 @@ export const useResumableUpload = () => {
 
   const triggerFileAssemble = async () => {
     try {
+      console.log("Starting file assembly...");
+      setUploadStatus("processing");
+      setErrorMessage("");
+
       const response = await fetch(
         "http://localhost:3001/api/assemble-chunks",
         {
@@ -295,13 +301,21 @@ export const useResumableUpload = () => {
       );
 
       if (!response.ok) {
-        throw new Error(`Assembly failed: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Assembly failed: ${errorData.error || response.statusText}`
+        );
       }
 
       const result = await response.json();
+      console.log("File assembly completed successfully:", result);
+      setAssemblyResult(result);
+      setUploadStatus("completed");
       return result;
     } catch (error) {
       console.error("Assembly failed:", error);
+      setUploadStatus("error");
+      setErrorMessage(`File assembly failed: ${error.message}`);
       throw error;
     }
   };
@@ -343,6 +357,10 @@ export const useResumableUpload = () => {
           uploadProgressRef.current?.markChunkComplete(chunkIndex, chunk.size);
           uploadProgressRef.current?.updateRetryStatus("");
           resolve(response);
+        } else if (xhr.status >= 500) {
+          reject(
+            new Error(`Server error for chunk ${chunkIndex}: ${xhr.statusText}`)
+          );
         } else {
           reject(new Error(`Chunk ${chunkIndex} failed: ${xhr.statusText}`));
         }
@@ -371,10 +389,9 @@ export const useResumableUpload = () => {
         error.message.includes("Timeout") ||
         error.message.includes("Failed to fetch");
 
-      const isRetryableError =
-        isNetworkError ||
-        (error.message.includes("failed") &&
-          !error.message.includes("aborted"));
+      const isServerError = error.message.includes("Server error");
+
+      const isRetryableError = isNetworkError && !isServerError;
 
       if (
         retryCount < MAX_RETRIES &&
@@ -427,7 +444,7 @@ export const useResumableUpload = () => {
       if (uploadedChunks.length >= fileChunks.length) {
         console.log("All chunks already uploaded, triggering assembly");
         await triggerFileAssemble();
-        setUploadStatus("completed");
+        // triggerFileAssemble handles status internally
         clearInterval(progressInterval);
         return;
       }
@@ -467,8 +484,8 @@ export const useResumableUpload = () => {
           if (response.isComplete) {
             console.log("File upload complete");
             await triggerFileAssemble();
+            // triggerFileAssemble handles status internally
             clearInterval(progressInterval);
-            setUploadStatus("completed");
             break;
           }
         } catch (error) {
@@ -536,5 +553,6 @@ export const useResumableUpload = () => {
     setErrorMessage,
     setSelectedFile,
     handleStartNewUpload,
+    assemblyResult,
   };
 };

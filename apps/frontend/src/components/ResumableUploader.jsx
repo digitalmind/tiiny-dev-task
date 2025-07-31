@@ -5,6 +5,14 @@ import UploadProgress from "./UploadProgress.jsx";
 import { useResumableUpload } from "../hooks/useResumableUpload.js";
 
 function ResumableUploader() {
+  const formatBytes = (bytes) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
   const {
     selectedFile,
     uploadStatus,
@@ -24,6 +32,7 @@ function ResumableUploader() {
     setUploadStatus,
     setErrorMessage,
     setSelectedFile,
+    assemblyResult,
   } = useResumableUpload();
 
   // Show resume button when we have an existing upload and the correct file is selected
@@ -47,7 +56,7 @@ function ResumableUploader() {
       {hasExistingUpload && uploadStatus === "idle" && !selectedFile && (
         <div className="existing-upload-notice">
           <p>
-            📁 Found an existing upload. Please select the same file to resume.
+            Found an existing upload. Please select the same file to resume.
           </p>
         </div>
       )}
@@ -78,11 +87,36 @@ function ResumableUploader() {
             />
           )}
 
+          {uploadStatus === "processing" && (
+            <div className="upload-processing">
+              <div className="processing-message">
+                <div className="processing-spinner"></div>
+                <div>Assembling file on server...</div>
+                <div className="processing-note">
+                  This may take a few moments for large files
+                </div>
+              </div>
+            </div>
+          )}
+
           {uploadStatus === "completed" && (
             <div className="upload-completed">
               <div className="upload-success">
                 Upload completed successfully!
               </div>
+              {assemblyResult && (
+                <div className="upload-details">
+                  <div className="detail-item">
+                    <strong>File Name:</strong> {assemblyResult.originalName}
+                  </div>
+                  <div className="detail-item">
+                    <strong>Size:</strong> {formatBytes(assemblyResult.size)}
+                  </div>
+                  <div className="detail-item">
+                    <strong>S3 Key:</strong> {assemblyResult.s3Key}
+                  </div>
+                </div>
+              )}
               <div className="button-group">
                 <Button
                   label="Upload New File"
