@@ -14,6 +14,7 @@ function ResumableUploader() {
   const [totalBytes, setTotalBytes] = useState(0);
   const [fileId, setFileId] = useState();
   const [fileChunks, setFileChunks] = useState([]);
+  const [chunkProgress, setChunkProgress] = useState({}); // Track progress of each chunk
 
   const isResumable = (file) => {
     const fid = generateFileId(file);
@@ -129,7 +130,6 @@ function ResumableUploader() {
       }
 
       const result = await response.json();
-      console.log("File assembled successfully", result);
       return result;
     } catch (error) {
       console.error("Assembly failed:", error);
@@ -149,10 +149,36 @@ function ResumableUploader() {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          const chunkBytes = chunk.size;
+          const uploadedBytes = event.loaded;
+          const progressPercentage = (uploadedBytes / chunkBytes) * 100;
+
+          setChunkProgress((prev) => ({
+            ...prev,
+            [chunkIndex]: {
+              uploaded: uploadedBytes,
+              total: chunkBytes,
+              percentage: progressPercentage,
+            },
+          }));
+        }
+      });
+
       xhr.addEventListener("load", () => {
         if (xhr.status === 200) {
           const response = JSON.parse(xhr.responseText);
           markChunkAsUploaded(chunkIndex);
+          // Mark chunk as 100% complete
+          setChunkProgress((prev) => ({
+            ...prev,
+            [chunkIndex]: {
+              uploaded: chunk.size,
+              total: chunk.size,
+              percentage: 100,
+            },
+          }));
           resolve(response);
         } else {
           reject(new Error(`Chunk ${chunkIndex} failed: ${xhr.statusText}`));
@@ -171,16 +197,109 @@ function ResumableUploader() {
 
   const uploadFile = async () => {
     setUploadStatus("uploading");
-    for (let i = 0; i < fileChunks.length; i++) {
-      const chunk = fileChunks[i];
-      const response = await uploadChunk(chunk, i);
-      console.log("Chunk uploaded successfully", response);
-      if (response.isComplete) {
-        console.log("File upload complete");
-        await triggerFileAssemble();
-        setUploadStatus("completed");
+
+    // Start progress polling
+    const progressInterval = startProgressPolling();
+
+    try {
+      for (let i = 0; i < fileChunks.length; i++) {
+        const chunk = fileChunks[i];
+        const response = await uploadChunk(chunk, i);
+        console.log("Chunk uploaded successfully", response);
+
+        if (response.isComplete) {
+          console.log("File upload complete");
+          await triggerFileAssemble();
+          clearInterval(progressInterval);
+          setUploadStatus("completed");
+          break;
+        }
+      }
+    } catch (error) {
+      clearInterval(progressInterval);
+      setUploadStatus("error");
+      setErrorMessage(`Upload failed: ${error.message}`);
+    }
+  };
+
+  const calculateProgressFromChunks = (uploadedChunks) => {
+    let completedChunksBytes = 0;
+    for (let i = 0; i < uploadedChunks.length; i++) {
+      if (fileChunks[i]) {
+        completedChunksBytes += fileChunks[i].size;
       }
     }
+
+    let currentChunkBytes = 0;
+    if (uploadedChunks.length < fileChunks.length) {
+      const currentChunkIndex = uploadedChunks.length;
+      const currentChunkProgress = chunkProgress[currentChunkIndex];
+      if (currentChunkProgress && currentChunkProgress.uploaded > 0) {
+        currentChunkBytes = currentChunkProgress.uploaded;
+      }
+    }
+
+    const totalUploadedBytes = completedChunksBytes + currentChunkBytes;
+    const totalBytes = selectedFile.size;
+    const progressPercentage = (totalUploadedBytes / totalBytes) * 100;
+
+    return {
+      uploadedBytes: Math.min(totalUploadedBytes, totalBytes),
+      totalBytes,
+      progressPercentage: Math.min(progressPercentage, 100),
+    };
+  };
+
+  const updateProgress = () => {
+    const storedData = localStorage.getItem(`upload-${fileId}`);
+    if (storedData) {
+      const { uploadedChunks = [] } = JSON.parse(storedData);
+      const { uploadedBytes, totalBytes, progressPercentage } =
+        calculateProgressFromChunks(uploadedChunks);
+
+      setBytesTransferred(uploadedBytes);
+      setTotalBytes(totalBytes);
+
+      return { progressPercentage, uploadedChunks: uploadedChunks.length };
+    }
+    return null;
+  };
+
+  React.useEffect(() => {
+    if (fileId && selectedFile) {
+      const storedData = localStorage.getItem(`upload-${fileId}`);
+      if (storedData) {
+        const { uploadedChunks = [] } = JSON.parse(storedData);
+        const { uploadedBytes, totalBytes } =
+          calculateProgressFromChunks(uploadedChunks);
+
+        if (
+          uploadedBytes >= 0 &&
+          totalBytes > 0 &&
+          uploadedBytes <= totalBytes
+        ) {
+          setBytesTransferred(uploadedBytes);
+          setTotalBytes(totalBytes);
+        }
+      }
+    }
+  }, [chunkProgress, fileId, selectedFile]);
+
+  const startProgressPolling = () => {
+    const progressInterval = setInterval(() => {
+      if (uploadStatus === "completed" || uploadStatus === "error") {
+        clearInterval(progressInterval);
+        return;
+      }
+
+      const progressData = updateProgress();
+      if (progressData && progressData.progressPercentage >= 100) {
+        clearInterval(progressInterval);
+        setUploadStatus("completed");
+      }
+    }, 1000); // Check every second
+
+    return progressInterval;
   };
   return (
     <div className="upload-form">

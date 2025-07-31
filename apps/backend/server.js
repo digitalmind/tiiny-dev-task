@@ -39,7 +39,7 @@ if (!fs.existsSync(chunksDir)) {
   fs.mkdirSync(chunksDir, { recursive: true });
 }
 
-app.get("/api/healthcheck", (req, res) => {
+app.get("/api/health-check", (req, res) => {
   res.json({
     message: "Up and running",
   });
