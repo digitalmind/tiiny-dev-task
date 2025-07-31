@@ -146,7 +146,6 @@ app.post("/api/assemble-chunks", (req, res) => {
     const finalFilePath = path.join(filesDir, finalFileName);
     const writeStream = fs.createWriteStream(finalFilePath);
 
-    // Assemble chunks in order
     for (let i = 0; i < metadata.totalChunks; i++) {
       const chunkPath = path.join(chunkDir, `chunk-${i}`);
       if (fs.existsSync(chunkPath)) {
@@ -176,31 +175,6 @@ app.post("/api/assemble-chunks", (req, res) => {
   } catch (error) {
     console.error("Chunk assembly error:", error);
     res.status(500).json({ error: "Failed to assemble chunks" });
-  }
-});
-
-app.get("/api/upload-progress/:fileId", (req, res) => {
-  const { fileId } = req.params;
-  const chunkDir = path.join(chunksDir, fileId);
-  const metadataPath = path.join(chunkDir, "metadata.json");
-
-  try {
-    if (!fs.existsSync(metadataPath)) {
-      return res.status(404).json({ error: "Upload not found" });
-    }
-
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
-
-    res.json({
-      fileId,
-      fileName: metadata.fileName,
-      uploadedChunks: metadata.uploadedChunks,
-      totalChunks: metadata.totalChunks,
-      progress: (metadata.uploadedChunks.length / metadata.totalChunks) * 100,
-    });
-  } catch (error) {
-    console.error("Progress check error:", error);
-    res.status(500).json({ error: "Failed to get progress" });
   }
 });
 

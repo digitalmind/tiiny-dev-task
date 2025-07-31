@@ -191,13 +191,11 @@ const UploadProgress = forwardRef(
           <Progress currentBytes={bytesTransferred} totalBytes={totalBytes} />
           {uploadStatus === "uploading" && onPause && (
             <button className="btn btn-warning" onClick={onPause}>
-              <span className="btn-icon">⏸️</span>
               <span className="btn-label">Pause</span>
             </button>
           )}
           {uploadStatus === "paused" && onResume && (
             <button className="btn btn-primary" onClick={onResume}>
-              <span className="btn-icon">▶️</span>
               <span className="btn-label">Resume</span>
             </button>
           )}

@@ -142,11 +142,9 @@ export const useResumableUpload = () => {
       const existingMeta = JSON.parse(localStorage.getItem(`upload-${fid}`));
       console.log("Resuming upload with chunks:", existingMeta.uploadedChunks);
 
-      // Don't overwrite existing metadata, just update the timestamp
       existingMeta.timestamp = Date.now();
       localStorage.setItem(`upload-${fid}`, JSON.stringify(existingMeta));
     } else {
-      // Only create new metadata for new uploads
       const uploadMeta = {
         fileId: fid,
         totalChunks: fileChunks.length,
@@ -175,7 +173,6 @@ export const useResumableUpload = () => {
     setTotalBytes(file.size);
 
     if (hasExistingUpload && !isResumableFile) {
-      // User selected a different file when there's an existing upload
       console.log("Wrong file selected for existing upload");
       setUploadStatus("error");
       setErrorMessage(
@@ -310,7 +307,7 @@ export const useResumableUpload = () => {
   };
 
   const uploadChunk = async (chunk, chunkIndex, retryCount = 0) => {
-    const MAX_RETRIES = 8;
+    const MAX_RETRIES = 5;
     const BASE_DELAY = 1000;
 
     const formData = new FormData();
@@ -369,7 +366,21 @@ export const useResumableUpload = () => {
 
       abortControllerRef.current = xhr;
     }).catch(async (error) => {
-      if (retryCount < MAX_RETRIES && !error.message.includes("aborted")) {
+      const isNetworkError =
+        error.message.includes("Network error") ||
+        error.message.includes("Timeout") ||
+        error.message.includes("Failed to fetch");
+
+      const isRetryableError =
+        isNetworkError ||
+        (error.message.includes("failed") &&
+          !error.message.includes("aborted"));
+
+      if (
+        retryCount < MAX_RETRIES &&
+        isRetryableError &&
+        !error.message.includes("aborted")
+      ) {
         const delay = BASE_DELAY * Math.pow(2, retryCount);
         const retryMessage = `Retrying chunk ${chunkIndex} in ${delay}ms (attempt ${
           retryCount + 1
@@ -384,7 +395,7 @@ export const useResumableUpload = () => {
 
       uploadProgressRef.current?.updateRetryStatus("");
 
-      if (retryCount >= MAX_RETRIES && !error.message.includes("aborted")) {
+      if (retryCount >= MAX_RETRIES && isRetryableError) {
         throw new Error(
           `Chunk ${chunkIndex} failed after ${MAX_RETRIES} retries. You can manually resume the upload.`
         );
@@ -473,7 +484,7 @@ export const useResumableUpload = () => {
           ) {
             console.log("Retries exhausted, allowing manual resume");
             clearInterval(progressInterval);
-            setUploadStatus("error");
+            setUploadStatus("paused");
             setErrorMessage(error.message);
             return;
           }

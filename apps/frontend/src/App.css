@@ -97,11 +97,6 @@
   transform: translateY(0);
 }
 
-.btn-icon {
-  font-size: 18px;
-  line-height: 1;
-}
-
 .btn-label {
   font-weight: 600;
 }
