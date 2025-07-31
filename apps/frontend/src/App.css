@@ -1,36 +1,27 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  max-width: none;
+  margin: 0;
+  padding: 0;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.app-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.app-container h3 {
+  margin-bottom: 2rem;
+  color: #333;
+  font-size: 2rem;
+  font-weight: 600;
 }
 
 .card {
@@ -39,8 +30,10 @@
   color: #0c0c0c;
   border: 2px solid #888;
   border-radius: 16px;
-  min-height: 10em;
-  min-width: 32em;
+  min-height: 8em;
+  width: 32em;
+  max-width: 600px;
+  margin-bottom: 1em;
 }
 .progress-container {
   width: 100%;
@@ -59,9 +52,10 @@
   color: #333;
 }
 
-.progress-percentage {
+.progress-bytes {
   font-weight: 600;
   color: #666;
+  font-size: 14px;
 }
 
 .progress {
@@ -171,7 +165,7 @@
   padding: 12px 20px;
   background-color: #007bff;
   color: white;
-  border-radius: 6px;
+  border-radius: 16px;
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s ease;
@@ -189,7 +183,7 @@
   margin-top: 8px;
   padding: 8px 12px;
   background-color: #f8f9fa;
-  border-radius: 4px;
+  border-radius: 16px;
   border: 1px solid #888;
 }
 
@@ -219,12 +213,49 @@
   flex-wrap: wrap;
 }
 
+.upload-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-filename {
+  font-weight: 500;
+  color: #333;
+  text-align: center;
+  font-size: 16px;
+}
+
+.progress-with-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.progress-with-controls .progress-container {
+  flex: 1;
+  margin: 0;
+}
+
+.progress-with-controls .btn {
+  min-width: 80px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.upload-completed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
 .upload-success {
   padding: 12px 16px;
   background-color: #d4edda;
   color: #155724;
   border: 1px solid #888;
-  border-radius: 6px;
+  border-radius: 16px;
   font-weight: 500;
   text-align: center;
 }
@@ -234,7 +265,7 @@
   background-color: #f8d7da;
   color: #721c24;
   border: 1px solid #888;
-  border-radius: 6px;
+  border-radius: 16px;
   font-weight: 500;
   text-align: center;
 }
