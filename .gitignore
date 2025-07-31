@@ -4,3 +4,4 @@ uploads/
 uploads/*
 uploads/chunks/
 uploads/files/
+.DS_Store

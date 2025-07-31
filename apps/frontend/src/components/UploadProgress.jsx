@@ -41,8 +41,24 @@ const UploadProgress = forwardRef(
       }
 
       const totalUploadedBytes = completedChunksBytes + currentChunkBytes;
-      const totalBytes = selectedFile.size;
-      const progressPercentage = (totalUploadedBytes / totalBytes) * 100;
+
+      let totalBytes = 0;
+      if (selectedFile) {
+        totalBytes = selectedFile.size;
+      } else if (fileId) {
+        try {
+          const storedData = localStorage.getItem(`upload-${fileId}`);
+          if (storedData) {
+            const uploadData = JSON.parse(storedData);
+            totalBytes = uploadData.totalSize || 0;
+          }
+        } catch (error) {
+          console.error("Error getting totalSize from localStorage:", error);
+        }
+      }
+
+      const progressPercentage =
+        totalBytes > 0 ? (totalUploadedBytes / totalBytes) * 100 : 0;
 
       return {
         uploadedBytes: Math.min(totalUploadedBytes, totalBytes),
@@ -139,10 +155,30 @@ const UploadProgress = forwardRef(
       return null;
     }
 
+    const getFileName = () => {
+      if (selectedFile) {
+        return selectedFile.name;
+      }
+
+      if (fileId) {
+        try {
+          const storedData = localStorage.getItem(`upload-${fileId}`);
+          if (storedData) {
+            const uploadData = JSON.parse(storedData);
+            return uploadData.fileName || "Unknown file";
+          }
+        } catch (error) {
+          console.error("Error getting filename from localStorage:", error);
+        }
+      }
+
+      return "Unknown file";
+    };
+
     return (
       <div className="upload-progress-section">
         <div className="upload-filename">
-          {selectedFile.name} {uploadStatus === "uploading" && "(uploading...)"}
+          {getFileName()} {uploadStatus === "uploading" && "(uploading...)"}
         </div>
         <div className="progress-with-controls">
           <Progress currentBytes={bytesTransferred} totalBytes={totalBytes} />
