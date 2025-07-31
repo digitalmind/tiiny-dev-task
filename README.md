@@ -10,7 +10,6 @@ A robust file upload system with resumable uploads, pause/resume functionality, 
 - **S3 Integration**: Direct upload to AWS S3 or DigitalOcean Spaces
 - **Progress Tracking**: Real-time upload progress with chunk-level details
 - **Error Handling**: Comprehensive error handling with retry logic
-- **Sleep/Wake Detection**: Automatic pause on computer sleep
 - **Network Resilience**: Handles network interruptions gracefully
 - **Processing State**: File assembly progress indication
 
@@ -292,11 +291,10 @@ S3_ENDPOINT=https://ams3.digitaloceanspaces.com  # Optional
 # Install dependencies
 pnpm install
 
-# Start backend
-cd apps/backend && pnpm start
+# create .env in apps/backend with you AWS S3 credentials (check .env.example)
 
-# Start frontend
-cd apps/frontend && pnpm dev
+# Start apps
+pnpm dev
 ```
 
 ### 3. S3 Bucket Setup
