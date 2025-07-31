@@ -55,10 +55,6 @@ export const useResumableUpload = () => {
         setUploadStatus("idle");
         setHasExistingUpload(true);
 
-        console.log(
-          "Found existing upload, waiting for user to select same file:",
-          latestUpload
-        );
         return latestUpload;
       }
     }
@@ -138,10 +134,7 @@ export const useResumableUpload = () => {
     setFileChunks(fileChunks);
 
     if (isResumableFile) {
-      console.log("File is resumable, loading existing progress");
-
       const existingMeta = JSON.parse(localStorage.getItem(`upload-${fid}`));
-      console.log("Resuming upload with chunks:", existingMeta.uploadedChunks);
 
       existingMeta.timestamp = Date.now();
       localStorage.setItem(`upload-${fid}`, JSON.stringify(existingMeta));
@@ -174,7 +167,6 @@ export const useResumableUpload = () => {
     setTotalBytes(file.size);
 
     if (hasExistingUpload && !isResumableFile) {
-      console.log("Wrong file selected for existing upload");
       setUploadStatus("error");
       setErrorMessage(
         "Please select the same file that was originally uploaded to resume the upload."
@@ -183,15 +175,9 @@ export const useResumableUpload = () => {
     }
 
     if (isResumableFile) {
-      console.log("Resuming existing upload for file:", file.name);
-
       const fileChunks = generateFileChunks(file);
       setFileChunks(fileChunks);
-
-      console.log("Chunks generated, ready to resume upload");
     } else {
-      console.log("Starting new upload for file:", file.name);
-
       setUploadStatus("idle");
       setErrorMessage("");
       setBytesTransferred(0);
@@ -243,7 +229,6 @@ export const useResumableUpload = () => {
   };
 
   const handleStartUpload = () => {
-    console.log("File Id ", fileId);
     uploadFile(selectedFile);
   };
 
@@ -285,7 +270,6 @@ export const useResumableUpload = () => {
 
   const triggerFileAssemble = async () => {
     try {
-      console.log("Starting file assembly...");
       setUploadStatus("processing");
       setErrorMessage("");
 
@@ -308,7 +292,6 @@ export const useResumableUpload = () => {
       }
 
       const result = await response.json();
-      console.log("File assembly completed successfully:", result);
       setAssemblyResult(result);
       setUploadStatus("completed");
       return result;
@@ -402,7 +385,6 @@ export const useResumableUpload = () => {
         const retryMessage = `Retrying chunk ${chunkIndex} in ${delay}ms (attempt ${
           retryCount + 1
         }/${MAX_RETRIES})`;
-        console.log(retryMessage);
 
         uploadProgressRef.current?.updateRetryStatus(retryMessage);
 
@@ -437,14 +419,8 @@ export const useResumableUpload = () => {
       );
       const uploadedChunks = uploadMetaData.uploadedChunks || [];
 
-      console.log(
-        `Resuming upload from chunk ${uploadedChunks.length} of ${fileChunks.length}`
-      );
-
       if (uploadedChunks.length >= fileChunks.length) {
-        console.log("All chunks already uploaded, triggering assembly");
         await triggerFileAssemble();
-        // triggerFileAssemble handles status internally
         clearInterval(progressInterval);
         return;
       }
@@ -469,9 +445,7 @@ export const useResumableUpload = () => {
       }
 
       for (let i = uploadedChunks.length; i < fileChunks.length; i++) {
-        // Check if upload was paused
         if (isPausedRef.current) {
-          console.log("Upload paused at chunk", i);
           clearInterval(progressInterval);
           return;
         }
@@ -479,18 +453,14 @@ export const useResumableUpload = () => {
         const chunk = fileChunks[i];
         try {
           const response = await uploadChunk(chunk, i);
-          console.log("Chunk uploaded successfully", response);
 
           if (response.isComplete) {
-            console.log("File upload complete");
             await triggerFileAssemble();
-            // triggerFileAssemble handles status internally
             clearInterval(progressInterval);
             break;
           }
         } catch (error) {
           if (error.message.includes("aborted")) {
-            console.log("Upload aborted, stopping at chunk", i);
             clearInterval(progressInterval);
             return;
           }
@@ -499,7 +469,6 @@ export const useResumableUpload = () => {
             error.message.includes("failed after") &&
             error.message.includes("retries")
           ) {
-            console.log("Retries exhausted, allowing manual resume");
             clearInterval(progressInterval);
             setUploadStatus("paused");
             setErrorMessage(error.message);
