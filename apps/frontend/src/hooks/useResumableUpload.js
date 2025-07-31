@@ -1,5 +1,4 @@
 import { useState, useRef } from "react";
-import UploadProgress from "../components/UploadProgress.jsx";
 
 export const useResumableUpload = () => {
   const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB chunks
@@ -12,23 +11,39 @@ export const useResumableUpload = () => {
   const [fileId, setFileId] = useState();
   const [fileChunks, setFileChunks] = useState([]);
 
-  // Create ref for UploadProgress component
   const uploadProgressRef = useRef();
 
   const isResumable = (file) => {
     const fid = generateFileId(file);
     const rawLocalMetaAvailable = localStorage.getItem(`upload-${fid}`);
-    console.log(rawLocalMetaAvailable);
-    // if (!localMetaAvailable) {
-    //   return false;
-    // }
-    // if (
-    //   localMetaAvailable.uploadedChunks.length ===
-    //   localMetaAvailable.totalChunks
-    // ) {
-    //   return false;
-    // }
-    // return true;
+
+    if (!rawLocalMetaAvailable) {
+      return false;
+    }
+
+    try {
+      const localMetaAvailable = JSON.parse(rawLocalMetaAvailable);
+
+      if (
+        localMetaAvailable.uploadedChunks.length ===
+        localMetaAvailable.totalChunks
+      ) {
+        return false;
+      }
+
+      if (
+        localMetaAvailable.fileName === file.name &&
+        localMetaAvailable.totalSize === file.size &&
+        localMetaAvailable.lastModified === file.lastModified
+      ) {
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error parsing localStorage data:", error);
+      return false;
+    }
   };
 
   const generateFileId = (file) => {
@@ -59,26 +74,33 @@ export const useResumableUpload = () => {
   };
 
   const prepareSelectedFileForUpload = (file) => {
-    if (isResumable(file)) {
-      console.log("File is resumable");
-    }
     const fid = generateFileId(file);
     const fileChunks = generateFileChunks(file);
+    const isResumableFile = isResumable(file);
 
     setFileId(fid);
     setFileChunks(fileChunks);
-    const uploadMeta = {
-      fileId: fid,
-      totalChunks: fileChunks.length,
-      uploadedChunks: [],
-      chunkSize: CHUNK_SIZE,
-      fileName: file.name,
-      lastModified: file.lastModified,
-    };
-    localStorage.setItem(
-      `upload-${uploadMeta.fileId}`,
-      JSON.stringify(uploadMeta)
-    );
+
+    if (isResumableFile) {
+      console.log("File is resumable, loading existing progress");
+
+      const existingMeta = JSON.parse(localStorage.getItem(`upload-${fid}`));
+      console.log("Resuming upload with chunks:", existingMeta.uploadedChunks);
+    } else {
+      const uploadMeta = {
+        fileId: fid,
+        totalChunks: fileChunks.length,
+        uploadedChunks: [],
+        chunkSize: CHUNK_SIZE,
+        fileName: file.name,
+        lastModified: file.lastModified,
+        totalSize: file.size,
+      };
+      localStorage.setItem(
+        `upload-${uploadMeta.fileId}`,
+        JSON.stringify(uploadMeta)
+      );
+    }
   };
 
   const handleFileSelect = (file) => {
