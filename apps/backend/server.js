@@ -67,20 +67,6 @@ app.get("/api/health-check", (req, res) => {
   });
 });
 
-app.post("/api/upload", upload.single("file"), (req, res, next) => {
-  console.log("Request received", req.file);
-  const fileId = randomString(16);
-  const fileName = req.file.originalname;
-  const fileSize = req.file.size;
-  const fileType = req.file.mimetype;
-  res.json({
-    message: `File ${fileId} received`,
-    fileName,
-    fileSize,
-    fileType,
-  });
-});
-
 app.post("/api/upload-chunks", chunkUpload, (req, res) => {
   const { fileId, chunkIndex, totalChunks, fileName, totalSize } = req.body;
 

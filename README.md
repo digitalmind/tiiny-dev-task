@@ -4,15 +4,15 @@ A robust file upload system with resumable uploads, pause/resume functionality, 
 
 ## Features
 
-- ✅ **Resumable Uploads**: Resume interrupted uploads from where they left off
-- ✅ **Pause/Resume**: Manual pause and resume during upload
-- ✅ **Chunk-based Upload**: Large files split into manageable chunks
-- ✅ **S3 Integration**: Direct upload to AWS S3 or DigitalOcean Spaces
-- ✅ **Progress Tracking**: Real-time upload progress with chunk-level details
-- ✅ **Error Handling**: Comprehensive error handling with retry logic
-- ✅ **Sleep/Wake Detection**: Automatic pause on computer sleep
-- ✅ **Network Resilience**: Handles network interruptions gracefully
-- ✅ **Processing State**: File assembly progress indication
+- **Resumable Uploads**: Resume interrupted uploads from where they left off
+- **Pause/Resume**: Manual pause and resume during upload
+- **Chunk-based Upload**: Large files split into manageable chunks
+- **S3 Integration**: Direct upload to AWS S3 or DigitalOcean Spaces
+- **Progress Tracking**: Real-time upload progress with chunk-level details
+- **Error Handling**: Comprehensive error handling with retry logic
+- **Sleep/Wake Detection**: Automatic pause on computer sleep
+- **Network Resilience**: Handles network interruptions gracefully
+- **Processing State**: File assembly progress indication
 
 ## Architecture
 
@@ -97,27 +97,7 @@ const isResumable = (file) => {
 };
 ```
 
-### 4. Sleep/Wake Detection
-
-**Problem**: Computer sleep can interrupt uploads
-
-- **Solution**: Document visibility API + network status monitoring
-- **Implementation**: Automatic pause on sleep/wake cycles
-
-```javascript
-// Sleep detection
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && timeSinceLastActivity > 30000) {
-    pauseUpload(); // Computer likely woke from sleep
-  }
-});
-
-// Network monitoring
-window.addEventListener("offline", () => pauseUpload());
-window.addEventListener("online", () => resumeUpload());
-```
-
-### 5. Retry Logic
+### 4. Retry Logic
 
 **Strategy**: Exponential backoff for network errors
 
@@ -142,7 +122,7 @@ const uploadChunk = async (chunk, chunkIndex, retryCount = 0) => {
 };
 ```
 
-### 6. S3 Integration
+### 5. S3 Integration
 
 **Decision**: AWS SDK v3 with optional endpoint
 
@@ -163,7 +143,7 @@ S3_ENDPOINT=https://ams3.digitaloceanspaces.com  # For DigitalOcean
 AWS_REGION=us-east-1
 ```
 
-### 7. Progress Calculation
+### 6. Progress Calculation
 
 **Strategy**: Client-side calculation from chunk metadata
 
@@ -292,12 +272,6 @@ const calculateProgress = (uploadedChunks, currentChunkProgress) => {
 - **Current**: Basic validation
 - **Future**: Comprehensive file type checking
 - **Benefits**: Better security and user experience
-
-### 4. Compression
-
-- **Current**: No compression
-- **Future**: Client-side compression for supported file types
-- **Benefits**: Reduced bandwidth usage
 
 ## Setup Instructions
 
